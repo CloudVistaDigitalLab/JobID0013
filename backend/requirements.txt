@@ -4,3 +4,4 @@ motor
 pydantic
 pydantic[email]
 pydantic-settings
+passlib[bcrypt]
