@@ -5,3 +5,4 @@ pydantic
 pydantic[email]
 pydantic-settings
 ultralytics
+passlib[bcrypt]
