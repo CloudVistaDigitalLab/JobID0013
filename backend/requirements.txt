@@ -1,8 +1,10 @@
 fastapi
 uvicorn[standard]
-motor
+motor>=3.3.2
+pymongo>=4.9.1
 pydantic
 pydantic[email]
 pydantic-settings
 ultralytics
 passlib[bcrypt]
+python-multipart

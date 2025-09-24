@@ -1,6 +1,5 @@
-from fastapi import APIRouter, HTTPException, Depends
+from fastapi import APIRouter, HTTPException, Depends, Request
 from app.models.user import User
-from app.core.database import db
 from app.utils.security import hash_password, verify_password
 from bson import ObjectId
 from typing import List
@@ -8,6 +7,8 @@ from pydantic import BaseModel
 
 router = APIRouter(prefix="/users", tags=["Users"])
 
+def get_db(request: Request):
+    return request.app.state.db
 
 # =====================
 # Auth Models
@@ -26,7 +27,8 @@ class UserLogin(BaseModel):
 # Register
 # =====================
 @router.post("/register", response_model=User)
-async def register(user: UserRegister):
+async def register(user: UserRegister, db=Depends(get_db)):
+    print("Registering user:", user.email)
     # Check if user exists
     existing_user = await db["users"].find_one({"email": user.email})
     if existing_user:
@@ -40,7 +42,9 @@ async def register(user: UserRegister):
         "email": user.email,
         "password_hash": hashed_pw,
     }
+    print("Inserting user into DB:", user_dict)
     result = await db["users"].insert_one(user_dict)
+    print("User registered with ID:", result.inserted_id)
     return User(id=str(result.inserted_id), name=user.name, email=user.email, password_hash=hashed_pw)
 
 
@@ -48,7 +52,7 @@ async def register(user: UserRegister):
 # Login
 # =====================
 @router.post("/login")
-async def login(credentials: UserLogin):
+async def login(credentials: UserLogin, db=Depends(get_db)):
     user = await db["users"].find_one({"email": credentials.email})
     if not user:
         raise HTTPException(status_code=401, detail="Invalid email or password")
@@ -63,7 +67,7 @@ async def login(credentials: UserLogin):
 # Get all users
 # =====================
 @router.get("/", response_model=List[User])
-async def get_all_users():
+async def get_all_users(db=Depends(get_db)):
     users = []
     async for user in db["users"].find():
         users.append(User(id=str(user["_id"]), name=user["name"], email=user["email"], password_hash=user["password_hash"]))
@@ -74,7 +78,7 @@ async def get_all_users():
 # Get user by ID
 # =====================
 @router.get("/{user_id}", response_model=User)
-async def get_user(user_id: str):
+async def get_user(user_id: str, db=Depends(get_db)):
     user = await db["users"].find_one({"_id": ObjectId(user_id)})
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
@@ -90,7 +94,7 @@ class UserUpdate(BaseModel):
     password: str | None = None
 
 @router.put("/{user_id}", response_model=User)
-async def update_user(user_id: str, update: UserUpdate):
+async def update_user(user_id: str, update: UserUpdate, db=Depends(get_db)):
     update_dict = {k: v for k, v in update.dict().items() if v is not None}
 
     if "password" in update_dict:
@@ -108,7 +112,7 @@ async def update_user(user_id: str, update: UserUpdate):
 # Delete user
 # =====================
 @router.delete("/{user_id}")
-async def delete_user(user_id: str):
+async def delete_user(user_id: str, db=Depends(get_db)):
     result = await db["users"].delete_one({"_id": ObjectId(user_id)})
     if result.deleted_count == 0:
         raise HTTPException(status_code=404, detail="User not found")

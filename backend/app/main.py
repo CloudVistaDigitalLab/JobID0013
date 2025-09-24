@@ -5,11 +5,25 @@ import uvicorn
 import shutil
 import os
 
+from app.core.database import connect_to_mongo, close_mongo_connection
+from app.api.routes import user
+
 # Load your trained YOLOv11 model
 model = YOLO("app/models/best.pt")
 
 # Initialize FastAPI app
 app = FastAPI(title="Facial Emotion Detection API")
+
+@app.on_event("startup")
+async def startup_event():
+    await connect_to_mongo(app)
+
+@app.on_event("shutdown")
+async def shutdown_event():
+    await close_mongo_connection(app)
+
+
+app.include_router(user.router)
 
 @app.get("/")
 def root():
@@ -52,4 +66,4 @@ async def predict(file: UploadFile = File(...)):
 
 if __name__ == "__main__":
     # Run app locally for testing
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    uvicorn.run("app.main:app", host="0.0.0.0", port=8000, reload=True)
