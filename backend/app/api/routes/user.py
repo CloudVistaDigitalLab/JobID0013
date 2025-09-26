@@ -1,27 +1,14 @@
 from fastapi import APIRouter, HTTPException, Depends, Request
-from app.models.user import User
+from app.models.user import User, EmotionLog, UserRegister, UserLogin, EmotionCreate, UserUpdate
 from app.utils.security import hash_password, verify_password
 from bson import ObjectId
 from typing import List
-from pydantic import BaseModel
+from datetime import datetime
 
 router = APIRouter(prefix="/users", tags=["Users"])
 
 def get_db(request: Request):
     return request.app.state.db
-
-# =====================
-# Auth Models
-# =====================
-class UserRegister(BaseModel):
-    name: str
-    email: str
-    password: str
-
-class UserLogin(BaseModel):
-    email: str
-    password: str
-
 
 # =====================
 # Register
@@ -88,11 +75,6 @@ async def get_user(user_id: str, db=Depends(get_db)):
 # =====================
 # Update user
 # =====================
-class UserUpdate(BaseModel):
-    name: str | None = None
-    email: str | None = None
-    password: str | None = None
-
 @router.put("/{user_id}", response_model=User)
 async def update_user(user_id: str, update: UserUpdate, db=Depends(get_db)):
     update_dict = {k: v for k, v in update.dict().items() if v is not None}
@@ -117,3 +99,26 @@ async def delete_user(user_id: str, db=Depends(get_db)):
     if result.deleted_count == 0:
         raise HTTPException(status_code=404, detail="User not found")
     return {"message": "User deleted successfully"}
+
+
+# =====================
+# Log emotion
+# =====================
+@router.post("/{user_id}/emotions")
+async def log_emotion(user_id: str, emotion: EmotionCreate, db=Depends(get_db)):
+    user = await db["users"].find_one({"_id": ObjectId(user_id)})
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    new_log = EmotionLog(
+        timestamp=datetime.utcnow(),
+        emotion=emotion.emotion,
+        source=emotion.source
+    )
+
+    await db["users"].update_one(
+        {"_id": ObjectId(user_id)},
+        {"$push": {"emotion_logs": new_log.dict()}}
+    )
+
+    return {"message": "Emotion logged successfully"}

@@ -42,3 +42,21 @@ class User(BaseModel):
     performance_reports: List[PerformanceReport] = []
     created_at: datetime = datetime.utcnow()
     updated_at: datetime = datetime.utcnow()
+
+class UserRegister(BaseModel):
+    name: str
+    email: str
+    password: str
+
+class UserLogin(BaseModel):
+    email: str
+    password: str
+
+class EmotionCreate(BaseModel):
+    emotion: str
+    source: str
+
+class UserUpdate(BaseModel):
+    name: str | None = None
+    email: str | None = None
+    password: str | None = None

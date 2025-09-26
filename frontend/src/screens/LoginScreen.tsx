@@ -1,10 +1,11 @@
 import React, { useState } from 'react';
 import { View, Text, StyleSheet, TextInput, TouchableOpacity, SafeAreaView, Alert } from 'react-native';
 import { StackNavigationProp } from '@react-navigation/stack';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 type RootStackParamList = {
   Register: undefined;
-  Main: { userId: string } | undefined;
+  Main: undefined;
 };
 
 type LoginScreenNavigationProp = StackNavigationProp<RootStackParamList>;
@@ -31,11 +32,9 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ navigation }) => {
       console.log("Login response:", data);
 
       if (response.ok) {
+        await AsyncStorage.setItem('userId', data.user_id);
         Alert.alert("Success", "Logged in successfully!");
-        // Store user ID for later use (e.g., AsyncStorage)
-        // In a real app, you would save a token, not the user ID directly.
-        // For this example, we'll just navigate.
-        navigation.navigate('Main', { userId: data.user_id  });
+        navigation.navigate('Main');
       } else {
         Alert.alert("Login Failed", data.detail || "Something went wrong.");
       }

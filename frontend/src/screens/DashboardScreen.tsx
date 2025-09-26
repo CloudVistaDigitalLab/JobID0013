@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, SafeAreaView, ScrollView, Alert } from 'react-native';
 import { RouteProp } from '@react-navigation/native';
-import { StackNavigationProp } from '@react-navigation/stack';
+import EmotionDialog from '../components/EmotionDialog';
 
 type RootStackParamList = {
   Main: { userId: string };
@@ -15,6 +15,9 @@ interface DashboardScreenProps {
 
 const DashboardScreen: React.FC<DashboardScreenProps> = ({ route }) => {
   const [userName, setUserName] = useState<string>('User');
+  const [isModalVisible, setModalVisible] = useState<boolean>(true);
+  const [selectedEmotion, setSelectedEmotion] = useState<string | null>(null);
+  const [isCameraEmotion, setIsCameraEmotion] = useState<boolean>(false);
   const userId = route.params?.userId;
 
   useEffect(() => {
@@ -40,6 +43,12 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({ route }) => {
     }
   }, [userId]);
 
+  const handleEmotionSelected = (emotion: string, isCamera: boolean) => {
+    setSelectedEmotion(emotion);
+    setIsCameraEmotion(isCamera);
+    setModalVisible(false);
+  };
+
   return (
     <SafeAreaView style={styles.safeArea}>
       <ScrollView contentContainerStyle={styles.container}>
@@ -47,25 +56,29 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({ route }) => {
         <Text style={styles.welcomeText}>Welcome, {userName}!</Text>
         <Text style={styles.subtitle}>Your progress at a glance</Text>
 
-        {/* Placeholder for daily plan summary */}
         <View style={styles.card}>
           <Text style={styles.cardTitle}>Today's Plan</Text>
           <Text style={styles.cardText}>You have 3 tasks scheduled for today.</Text>
         </View>
 
-        {/* Placeholder for mood tracking */}
         <View style={styles.card}>
           <Text style={styles.cardTitle}>Mood Tracker</Text>
-          <Text style={styles.cardText}>Your current mood: Happy 😊</Text>
+          <Text style={styles.cardText}>
+            Your current mood: {selectedEmotion || (isCameraEmotion ? "Captured via Camera" : "Happy 😊")}
+          </Text>
         </View>
 
-        {/* Placeholder for a recent activity list */}
         <View style={styles.card}>
           <Text style={styles.cardTitle}>Recent Activity</Text>
           <Text style={styles.cardText}>- Completed "Math Homework"</Text>
           <Text style={styles.cardText}>- Started "Reading Chapter 5"</Text>
         </View>
       </ScrollView>
+
+      <EmotionDialog
+        isVisible={isModalVisible}
+        onEmotionSelected={handleEmotionSelected}
+      />
     </SafeAreaView>
   );
 };
