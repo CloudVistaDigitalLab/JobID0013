@@ -122,3 +122,154 @@ async def log_emotion(user_id: str, emotion: EmotionCreate, db=Depends(get_db)):
     )
 
     return {"message": "Emotion logged successfully"}
+
+# =====================
+# HABITS
+# =====================
+@router.post("/{user_id}/habits")
+async def add_habit(user_id: str, habit: Habit, db=Depends(get_db)):
+    user = await db["users"].find_one({"_id": ObjectId(user_id)})
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    habit_dict = habit.dict()
+    await db["users"].update_one(
+        {"_id": ObjectId(user_id)},
+        {"$push": {"habits": habit_dict}}
+    )
+    return {"message": "Habit added successfully"}
+
+
+@router.get("/{user_id}/habits", response_model=List[Habit])
+async def get_habits(user_id: str, db=Depends(get_db)):
+    user = await db["users"].find_one({"_id": ObjectId(user_id)})
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    return user.get("habits", [])
+
+
+@router.get("/{user_id}/habits/{habit_id}", response_model=Habit)
+async def get_habit(user_id: str, habit_id: str, db=Depends(get_db)):
+    user = await db["users"].find_one({"_id": ObjectId(user_id)})
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    for h in user.get("habits", []):
+        if h["habit_id"] == habit_id:
+            return h
+    raise HTTPException(status_code=404, detail="Habit not found")
+
+
+@router.put("/{user_id}/habits/{habit_id}", response_model=Habit)
+async def update_habit(user_id: str, habit_id: str, habit_update: Habit, db=Depends(get_db)):
+    update_dict = {k: v for k, v in habit_update.dict().items() if v is not None}
+
+    result = await db["users"].update_one(
+        {"_id": ObjectId(user_id), "habits.habit_id": habit_id},
+        {"$set": {f"habits.$.{k}": v for k, v in update_dict.items()}}
+    )
+    if result.modified_count == 0:
+        raise HTTPException(status_code=404, detail="Habit not found or no changes made")
+
+    updated_user = await db["users"].find_one({"_id": ObjectId(user_id)})
+    for h in updated_user.get("habits", []):
+        if h["habit_id"] == habit_id:
+            return h
+
+
+@router.patch("/{user_id}/habits/{habit_id}/status")
+async def update_habit_status(user_id: str, habit_id: str, status: float, db=Depends(get_db)):
+    result = await db["users"].update_one(
+        {"_id": ObjectId(user_id), "habits.habit_id": habit_id},
+        {"$set": {"habits.$.progress": status}}
+    )
+    if result.modified_count == 0:
+        raise HTTPException(status_code=404, detail="Habit not found")
+    return {"message": "Habit status updated successfully"}
+
+
+@router.delete("/{user_id}/habits/{habit_id}")
+async def delete_habit(user_id: str, habit_id: str, db=Depends(get_db)):
+    result = await db["users"].update_one(
+        {"_id": ObjectId(user_id)},
+        {"$pull": {"habits": {"habit_id": habit_id}}}
+    )
+    if result.modified_count == 0:
+        raise HTTPException(status_code=404, detail="Habit not found")
+    return {"message": "Habit deleted successfully"}
+
+
+# =====================
+# TASKS
+# =====================
+@router.post("/{user_id}/tasks")
+async def add_task(user_id: str, task: Task, db=Depends(get_db)):
+    user = await db["users"].find_one({"_id": ObjectId(user_id)})
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    task_dict = task.dict()
+    await db["users"].update_one(
+        {"_id": ObjectId(user_id)},
+        {"$push": {"tasks": task_dict}}
+    )
+    return {"message": "Task added successfully"}
+
+
+@router.get("/{user_id}/tasks", response_model=List[Task])
+async def get_tasks(user_id: str, db=Depends(get_db)):
+    user = await db["users"].find_one({"_id": ObjectId(user_id)})
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    return user.get("tasks", [])
+
+
+@router.get("/{user_id}/tasks/{task_id}", response_model=Task)
+async def get_task(user_id: str, task_id: str, db=Depends(get_db)):
+    user = await db["users"].find_one({"_id": ObjectId(user_id)})
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    for t in user.get("tasks", []):
+        if t["task_id"] == task_id:
+            return t
+    raise HTTPException(status_code=404, detail="Task not found")
+
+
+@router.put("/{user_id}/tasks/{task_id}", response_model=Task)
+async def update_task(user_id: str, task_id: str, task_update: Task, db=Depends(get_db)):
+    update_dict = {k: v for k, v in task_update.dict().items() if v is not None}
+
+    result = await db["users"].update_one(
+        {"_id": ObjectId(user_id), "tasks.task_id": task_id},
+        {"$set": {f"tasks.$.{k}": v for k, v in update_dict.items()}}
+    )
+    if result.modified_count == 0:
+        raise HTTPException(status_code=404, detail="Task not found or no changes made")
+
+    updated_user = await db["users"].find_one({"_id": ObjectId(user_id)})
+    for t in updated_user.get("tasks", []):
+        if t["task_id"] == task_id:
+            return t
+
+
+@router.patch("/{user_id}/tasks/{task_id}/status")
+async def update_task_status(user_id: str, task_id: str, status: str, db=Depends(get_db)):
+    result = await db["users"].update_one(
+        {"_id": ObjectId(user_id), "tasks.task_id": task_id},
+        {"$set": {"tasks.$.status": status}}
+    )
+    if result.modified_count == 0:
+        raise HTTPException(status_code=404, detail="Task not found")
+    return {"message": "Task status updated successfully"}
+
+
+@router.delete("/{user_id}/tasks/{task_id}")
+async def delete_task(user_id: str, task_id: str, db=Depends(get_db)):
+    result = await db["users"].update_one(
+        {"_id": ObjectId(user_id)},
+        {"$pull": {"tasks": {"task_id": task_id}}}
+    )
+    if result.modified_count == 0:
+        raise HTTPException(status_code=404, detail="Task not found")
+    return {"message": "Task deleted successfully"}

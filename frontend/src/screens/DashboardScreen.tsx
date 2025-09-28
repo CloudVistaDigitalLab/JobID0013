@@ -76,7 +76,7 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({ route }) => {
       </ScrollView>
 
       <EmotionDialog
-        isVisible={isModalVisible}
+        visible={isModalVisible}
         onEmotionSelected={handleEmotionSelected}
       />
     </SafeAreaView>
