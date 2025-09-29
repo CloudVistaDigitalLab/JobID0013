@@ -1,5 +1,5 @@
 from fastapi import APIRouter, HTTPException, Depends, Request
-from app.models.user import User, EmotionLog, UserRegister, UserLogin, EmotionCreate, UserUpdate
+from app.models.user import User, EmotionLog, UserRegister, UserLogin, EmotionCreate, UserUpdate, Habit, Task
 from app.utils.security import hash_password, verify_password
 from bson import ObjectId
 from typing import List
