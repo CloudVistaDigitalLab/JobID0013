@@ -4,7 +4,7 @@ import { Platform, PermissionsAndroid } from "react-native";
 import EmojiSelector from "react-native-emoji-selector";
 import { launchCamera, launchImageLibrary } from "react-native-image-picker";
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import Feather from 'react-native-vector-icons/Feather';
+// import FontAwesome from 'react-native-vector-icons/FontAwesome';
 
 
 interface EmotionDialogProps {
@@ -160,9 +160,10 @@ const EmotionDialog: React.FC<EmotionDialogProps> = ({ visible, onEmotionSelecte
         <View style={styles.overlay}>
           <View style={styles.container}>
             {(showMoodButtons || showEmojiPicker) && (
-              <TouchableOpacity style={styles.backButton} onPress={handleBack}>
-                <Feather name="arrow-left" size={24} color="#1F2937" />
-              </TouchableOpacity>
+              // Start of Selection
+              <TouchableOpacity style={styles.backButton} onPress={handleBack}>
+                <Text style={{fontSize: 24, color: "#1F2937"}}>{"<"}</Text>
+              </TouchableOpacity>
             )}
             
             <Text style={styles.title}>Select Your Emotion</Text>
