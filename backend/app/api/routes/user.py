@@ -1,14 +1,25 @@
 from fastapi import APIRouter, HTTPException, Depends, Request
-from app.models.user import User, EmotionLog, UserRegister, UserLogin, EmotionCreate, UserUpdate
+from app.models.user import User, EmotionLog, UserRegister, UserLogin, EmotionCreate, UserUpdate, Habit, Task
 from app.utils.security import hash_password, verify_password
 from bson import ObjectId
 from typing import List
-from datetime import datetime
+from datetime import datetime, timedelta
+import google.generativeai as genai
 
 router = APIRouter(prefix="/users", tags=["Users"])
 
 def get_db(request: Request):
     return request.app.state.db
+
+moodEmojis = [
+    { "emoji": "😮", "label": "Surprise" },
+    { "emoji": "😢", "label": "Sad" },
+    { "emoji": "😐", "label": "Neutral" },
+    { "emoji": "😊", "label": "Happy" },
+    { "emoji": "😨", "label": "Fear" },
+    { "emoji": "🤢", "label": "Disgust" },
+    { "emoji": "😡", "label": "Angry" }
+]
 
 # =====================
 # Register
@@ -273,3 +284,89 @@ async def delete_task(user_id: str, task_id: str, db=Depends(get_db)):
     if result.modified_count == 0:
         raise HTTPException(status_code=404, detail="Task not found")
     return {"message": "Task deleted successfully"}
+
+# =====================
+# Get Recommendations
+# =====================
+@router.get("/{user_id}/recommendations")
+async def get_recommendations(user_id: str, db=Depends(get_db)):
+    user = await db["users"].find_one({"_id": ObjectId(user_id)})
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    # 1. Get last logged emotion
+    emotion_logs = user.get("emotion_logs", [])
+    if not emotion_logs:
+        raise HTTPException(status_code=400, detail="No emotion logs found for user")
+    last_emotion = emotion_logs[-1]  # take last entry
+    emotion_value = last_emotion['emotion']
+    emotion_source = last_emotion['source']
+
+    if emotion_source == 'emoji':
+        # Find the matching label for the emoji
+        matched_mood = next((m for m in moodEmojis if m['emoji'] == emotion_value), None)
+        if matched_mood:
+            # Format: '😊 Happy'
+            display_emotion = f"{matched_mood['emoji']} {matched_mood['label']}"
+        else:
+            # Fallback if the emoji value isn't found in the list
+            display_emotion = emotion_value
+    else:
+        # For non-emoji sources (e.g., 'text' or 'api'), use the raw value
+        display_emotion = emotion_value
+
+    emotion_state = f"{display_emotion} (source: {emotion_source})"
+    print(f"Last emotion for user {user_id}: {emotion_state}")
+
+    # 2. Get pending tasks
+    tasks = [t for t in user.get("tasks", []) if t.get("status") != "completed"]
+
+    # 3. Get due habits for today
+    today = datetime.utcnow().date()
+    habits_due = []
+    for h in user.get("habits", []):
+        freq = h.get("frequency", "daily")
+        if freq == "daily":
+            habits_due.append(h)
+        elif freq == "weekly" and today.weekday() == 0:  # Example: due on Monday
+            habits_due.append(h)
+        # You can expand for "custom" logic if needed
+
+    # 4. Prepare prompt for Gemini
+    prompt = f"""
+    The user is currently feeling: {emotion_state}.
+    Here are their pending tasks: {tasks}.
+    Here are their due habits for today: {habits_due}.
+
+    Based on the emotion and current state, recommend which tasks and habits
+    they should focus on right now. Only return tasks and habits relevant
+    to this emotion and helpful for productivity and mental well-being.
+
+    Please respond in JSON format:
+    {{
+        "recommended_tasks": [...],
+        "recommended_habits": [...]
+    }}
+    """
+
+    # 5. Call Gemini
+    model = genai.GenerativeModel("gemini-2.5-flash")
+    response = model.generate_content(prompt)
+
+    # 6. Parse Gemini response
+    import json
+    import re
+
+    raw_text = response.text.strip()
+
+    # Remove code block markers if present
+    clean_text = re.sub(r"^```json\s*|\s*```$", "", raw_text, flags=re.DOTALL).strip()
+
+    try:
+        result = json.loads(clean_text)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Gemini response parsing failed: {str(e)}")
+    
+    result["gemini_prompt"] = prompt 
+
+    return result
