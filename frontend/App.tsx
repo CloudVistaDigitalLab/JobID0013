@@ -13,7 +13,7 @@ import AddToDoScreen from './src/screens/AddToDoScreen';
 
 // Ignore specific warning messages from external libraries
 LogBox.ignoreLogs([
-  'Your project is accessing the following APIs from a deprecated global '
+    'Your project is accessing the following APIs from a deprecated global '
 ]);
 
 type RootStackParamList = {
@@ -28,9 +28,10 @@ type RootStackParamList = {
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
 const App: React.FC = () => {
-  useEffect(() => {
-    console.log("App component mounted and 'react-native-gesture-handler' is imported.");
-  }, []);
+    useEffect(() => {
+        console.log("App component mounted and 'react-native-gesture-handler' is imported.");
+    }, []);
+
 
   return (
     <NavigationContainer>
@@ -44,6 +45,7 @@ const App: React.FC = () => {
       </Stack.Navigator>
     </NavigationContainer>
   );
+
 };
 
 export default App;
