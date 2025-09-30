@@ -1,12 +1,16 @@
 from fastapi import FastAPI, UploadFile, File
 from fastapi.responses import JSONResponse
 from ultralytics import YOLO
+import google.generativeai as genai
 import uvicorn
 import shutil
 import os
 
 from app.core.database import connect_to_mongo, close_mongo_connection
 from app.api.routes import user
+
+# Load environment variables
+genai.configure(api_key="AIzaSyDlUOj0wS0GdCZItEKufQ1SzPt-6OrLWFA")
 
 # Load your trained YOLOv11 model
 model = YOLO("app/models/best.pt")

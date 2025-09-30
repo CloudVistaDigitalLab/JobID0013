@@ -1,10 +1,14 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, SafeAreaView, ScrollView, Alert } from 'react-native';
-import { RouteProp } from '@react-navigation/native';
+import { View, Text, StyleSheet, SafeAreaView, ScrollView, Alert, TouchableOpacity } from 'react-native';
+import { RouteProp, useNavigation } from '@react-navigation/native';
+import { StackNavigationProp } from '@react-navigation/stack';
 import EmotionDialog from '../components/EmotionDialog';
+import ToDoSelectDialog from '../components/ToDoSelectDialog';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 type RootStackParamList = {
   Main: { userId: string };
+  AddToDo: { userId: string; type: 'habit' | 'task' };
 };
 
 type DashboardScreenRouteProp = RouteProp<RootStackParamList, 'Main'>;
@@ -12,41 +16,64 @@ type DashboardScreenRouteProp = RouteProp<RootStackParamList, 'Main'>;
 interface DashboardScreenProps {
   route: DashboardScreenRouteProp;
 }
-
 const DashboardScreen: React.FC<DashboardScreenProps> = ({ route }) => {
   const [userName, setUserName] = useState<string>('User');
   const [isModalVisible, setModalVisible] = useState<boolean>(true);
   const [selectedEmotion, setSelectedEmotion] = useState<string | null>(null);
   const [isCameraEmotion, setIsCameraEmotion] = useState<boolean>(false);
+  const [isToDoDialogVisible, setToDoDialogVisible] = useState<boolean>(false);
+  const [recommendedTasks, setRecommendedTasks] = useState<any[]>([]);
+  const [recommendedHabits, setRecommendedHabits] = useState<any[]>([]);
   const userId = route.params?.userId;
+  const navigation = useNavigation<StackNavigationProp<RootStackParamList, 'Main'>>();
 
   useEffect(() => {
-    if (!userId) return;
-    const fetchUser = async () => {
+    const fetchUserAndRecommendations = async () => {
       try {
-        const response = await fetch(`http://10.0.2.2:8000/users/${userId}`);
+        let id = userId;
+        if (!id) {
+          id = (await AsyncStorage.getItem('userId')) ?? ""; // fallback
+        }
+        if (!id) return;
+
+        // Fetch user
+        const response = await fetch(`http://10.0.2.2:8000/users/${id}`);
         const data = await response.json();
-        
         if (response.ok) {
           setUserName(data.name);
         } else {
           Alert.alert("Error", data.detail || "Failed to fetch user data.");
         }
+
+        // Fetch recommendations
+        const recRes = await fetch(`http://10.0.2.2:8000/users/${id}/recommendations`);
+        const recData = await recRes.json();
+
+        if (recRes.ok) {
+          setRecommendedTasks(recData.recommended_tasks || []);
+          setRecommendedHabits(recData.recommended_habits || []);
+        } else {
+          console.log("Recommendations error:", recData.detail);
+        }
+
       } catch (error) {
         console.error(error);
-        Alert.alert("Error", "Could not fetch user details from server.");
+        Alert.alert("Error", "Could not fetch user details or recommendations.");
       }
     };
-    
-    if (userId) {
-      fetchUser();
-    }
+
+    fetchUserAndRecommendations();
   }, [userId]);
 
   const handleEmotionSelected = (emotion: string, isCamera: boolean) => {
     setSelectedEmotion(emotion);
     setIsCameraEmotion(isCamera);
     setModalVisible(false);
+  };
+
+  const handleToDoSelect = (type: 'habit' | 'task') => {
+    setToDoDialogVisible(false);
+    navigation.navigate("AddToDo", { userId, type });
   };
 
   return (
@@ -58,7 +85,21 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({ route }) => {
 
         <View style={styles.card}>
           <Text style={styles.cardTitle}>Today's Plan</Text>
-          <Text style={styles.cardText}>You have 3 tasks scheduled for today.</Text>
+          {recommendedTasks.length === 0 && recommendedHabits.length === 0 ? (
+            <Text style={styles.cardText}>No recommended tasks or habits for today.</Text>
+          ) : (
+            <>
+              <Text style={[styles.cardText, { fontWeight: "600" }]}>Tasks:</Text>
+              {recommendedTasks.map((task, idx) => (
+                <Text key={idx} style={styles.cardText}>- {task.title}</Text>
+              ))}
+
+              <Text style={[styles.cardText, { fontWeight: "600", marginTop: 10 }]}>Habits:</Text>
+              {recommendedHabits.map((habit, idx) => (
+                <Text key={idx} style={styles.cardText}>- {habit.title}</Text>
+              ))}
+            </>
+          )}
         </View>
 
         <View style={styles.card}>
@@ -75,9 +116,23 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({ route }) => {
         </View>
       </ScrollView>
 
+      <TouchableOpacity 
+        style={styles.addButton} 
+        onPress={() => setToDoDialogVisible(true)}
+      >
+        <Text style={styles.addButtonText}>＋</Text>
+      </TouchableOpacity>
+
+
       <EmotionDialog
         visible={isModalVisible}
         onEmotionSelected={handleEmotionSelected}
+      />
+
+      <ToDoSelectDialog
+        visible={isToDoDialogVisible}
+        onSelect={handleToDoSelect}
+        onClose={() => setToDoDialogVisible(false)}
       />
     </SafeAreaView>
   );
@@ -129,6 +184,23 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: '#374151',
     marginBottom: 5,
+  },
+  addButton: {
+    position: 'absolute',
+    bottom: 30,
+    right: 20,
+    backgroundColor: '#3B82F6',
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    justifyContent: 'center',
+    alignItems: 'center',
+    elevation: 5,
+  },
+  addButtonText: {
+    color: 'white',
+    fontSize: 30,
+    fontWeight: 'bold',
   },
 });
 

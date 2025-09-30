@@ -9,6 +9,7 @@ import OnboardingScreen from './src/screens/OnboardingScreen';
 import LoginScreen from './src/screens/LoginScreen';
 import RegisterScreen from './src/screens/RegisterScreen';
 import BottomTabNavigator from './src/navigation/BottomTabNavigator';
+import AddToDoScreen from './src/screens/AddToDoScreen';
 
 // Ignore specific warning messages from external libraries
 LogBox.ignoreLogs([
@@ -16,11 +17,12 @@ LogBox.ignoreLogs([
 ]);
 
 type RootStackParamList = {
-    Splash: undefined;
-    Onboarding: undefined;
-    Login: undefined;
-    Register: undefined;
-    Main: undefined;
+  Splash: undefined;
+  Onboarding: undefined;
+  Login: undefined;
+  Register: undefined;
+  Main: undefined;
+  AddToDo: { userId: string; type: 'habit' | 'task' };
 };
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
@@ -30,17 +32,20 @@ const App: React.FC = () => {
         console.log("App component mounted and 'react-native-gesture-handler' is imported.");
     }, []);
 
-    return (
-        <NavigationContainer>
-            <Stack.Navigator initialRouteName="Splash">
-                <Stack.Screen name="Splash" component={SplashScreen} options={{ headerShown: false }} />
-                <Stack.Screen name="Onboarding" component={OnboardingScreen} options={{ headerShown: false }} />
-                <Stack.Screen name="Login" component={LoginScreen} options={{ headerShown: false }} />
-                <Stack.Screen name="Register" component={RegisterScreen} options={{ headerShown: false }} />
-                <Stack.Screen name="Main" component={BottomTabNavigator} options={{ headerShown: false }} />
-            </Stack.Navigator>
-        </NavigationContainer>
-    );
+
+  return (
+    <NavigationContainer>
+      <Stack.Navigator initialRouteName="Splash">
+        <Stack.Screen name="Splash" component={SplashScreen} options={{ headerShown: false }} />
+        <Stack.Screen name="Onboarding" component={OnboardingScreen} options={{ headerShown: false }} />
+        <Stack.Screen name="Login" component={LoginScreen} options={{ headerShown: false }} />
+        <Stack.Screen name="Register" component={RegisterScreen} options={{ headerShown: false }} />
+        <Stack.Screen name="Main" component={BottomTabNavigator} options={{ headerShown: false }} />
+        <Stack.Screen name="AddToDo" component={AddToDoScreen} options={{ title: 'Add To-Do' }} />
+      </Stack.Navigator>
+    </NavigationContainer>
+  );
+
 };
 
 export default App;

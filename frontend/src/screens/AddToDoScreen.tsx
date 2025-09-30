@@ -1,9 +1,10 @@
 import React, { useState } from 'react';
 import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { RouteProp, useNavigation } from '@react-navigation/native';
 
 type RootStackParamList = {
-  AddToDo: { userId: string; type: 'habit' | 'task' };
+  AddToDo: { type: 'habit' | 'task' }; // ✅ no need for userId param anymore
 };
 
 type AddToDoScreenRouteProp = RouteProp<RootStackParamList, 'AddToDo'>;
@@ -13,7 +14,7 @@ interface AddToDoScreenProps {
 }
 
 const AddToDoScreen: React.FC<AddToDoScreenProps> = ({ route }) => {
-  const { userId, type } = route.params;
+  const { type } = route.params;
   const navigation = useNavigation();
 
   const [title, setTitle] = useState('');
@@ -22,16 +23,23 @@ const AddToDoScreen: React.FC<AddToDoScreenProps> = ({ route }) => {
   const [dueDate, setDueDate] = useState(''); // task only
 
   const handleSubmit = async () => {
-    const body =
-      type === 'habit'
-        ? { habit_id: Date.now().toString(), title, description, frequency, progress: 0 }
-        : { task_id: Date.now().toString(), title, description, due_date: dueDate, status: 'pending' };
-
-    const endpoint = type === 'habit'
-      ? `http://10.0.2.2:8000/users/${userId}/habits`
-      : `http://10.0.2.2:8000/users/${userId}/tasks`;
-
     try {
+      // ✅ get userId from AsyncStorage
+      const userId = await AsyncStorage.getItem('userId');
+      if (!userId) {
+        Alert.alert("Error", "User not found. Please log in again.");
+        return;
+      }
+
+      const body =
+        type === 'habit'
+          ? { habit_id: Date.now().toString(), title, description, frequency, progress: 0 }
+          : { task_id: Date.now().toString(), title, description, due_date: dueDate, status: 'pending' };
+
+      const endpoint = type === 'habit'
+        ? `http://10.0.2.2:8000/users/${userId}/habits`
+        : `http://10.0.2.2:8000/users/${userId}/tasks`;
+
       const response = await fetch(endpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
