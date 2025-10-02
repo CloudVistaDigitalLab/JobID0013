@@ -1,6 +1,5 @@
 from fastapi import APIRouter, HTTPException, Depends, Request
 from app.models.user import User, EmotionLog, UserRegister, UserLogin, EmotionCreate, UserUpdate, Habit, Task
-from app.utils.security import hash_password, verify_password
 from bson import ObjectId
 from typing import List
 from datetime import datetime, timedelta
@@ -418,20 +417,54 @@ async def get_recommendations(user_id: str, db=Depends(get_db)):
             habits_due.append(h)
 
     # Prepare Gemini prompt
+    # Prepare an advanced Gemini prompt (replace previous prompt assignment with this)
     prompt = f"""
-    The user is currently feeling: {emotion_state}.
-    Here are their pending tasks: {tasks}.
-    Here are their due habits for today: {habits_due}.
+    You are a strict, deterministic recommendation engine. Using ONLY the input data below, select **only** the tasks and habits that are appropriate to perform *today* for the user given their current emotional state. Follow these rules exactly.
 
-    Based on the emotion and current state, recommend which tasks and habits
-    they should focus on right now. Only return tasks and habits relevant
-    to this emotion and helpful for productivity and mental well-being.
+    INPUT (only use these values; do not invent extra fields):
+    - emotion_state: {emotion_state}
+    - tasks: {tasks}
+    - habits_due: {habits_due}
 
-    Please respond in JSON format:
+    RULES & SELECTION LOGIC
+    1) OUTPUT FORMAT (must be returned EXACTLY as JSON, no extra text):
     {{
-        "recommended_tasks": [...],
-        "recommended_habits": [...]
+    "recommended_tasks": [....],
+    "recommended_habits": [....]
     }}
+
+    2) TASK RULES
+    - Consider only tasks present in the `tasks` list and that are not completed.
+    - **Always** prefer tasks that are actionable today and appropriate for the user's current emotional state.
+    - For low-energy emotions (Sad, Fear, Disgust, Angry): favor low-effort tasks (estimated_minutes <= 30 or energy_required == "low") or short, high-priority tasks.
+    - For neutral/positive emotions (Neutral, Happy, Surprise): allow medium / higher-effort tasks if they are high priority or due soon.
+    - If `estimated_minutes`, `priority`, `due_date`, or `energy_required` exist, use them to compute suitability. If fields are missing, make conservative inferences (prefer short/low-effort tasks for low-energy emotions).
+    - Assign each recommended task a `score` 0-100 combining priority, urgency, and emotional suitability. Higher score = better fit.
+    - Provide a single-sentence `reason` mentioning the emotion and why the task is appropriate.
+
+    3) HABIT RULES
+    - Consider only habits present in `habits_due`.
+    - **If a habit has `frequency == "daily" DO NOT recommend it for today UNLESS at least one of the following is true:**
+    a) The habit explicitly contains a field that indicates it must be done today (e.g., `force_today: true`), or
+    b) The habit includes an explicit `allowed_emotions` list and the current emotion matches one of those values, or
+    c) The habit is very short (estimated_minutes <= 10 or energy_required == "low") AND has high priority.
+    - For non-daily habits (weekly/custom), recommend only when they are due today and compatible with emotion.
+    - If habit metadata is missing, default to **not** recommending daily habits unless they are clearly low-effort & high-priority.
+    - Assign each recommended habit a `score` 0-100 and a one-line `reason` referencing emotion compatibility.
+
+    4) GENERAL & SAFETY
+    - Never recommend items that are already completed or clearly not due today.
+    - Do not recommend a habit just because it is "daily" — daily habits are excluded by default unless the exceptions above apply.
+    - If no tasks or habits meet the criteria, return empty arrays.
+    - If uncertain about compatibility, be conservative (prefer not to recommend).
+    - Output must be valid JSON only (no surrounding markdown, comments, or explanation).
+
+    DATA (use exactly this; do not invent extra context):
+    emotion_state: {emotion_state}
+    tasks: {tasks}
+    habits_due: {habits_due}
+
+    Return the JSON now.
     """
 
     model = genai.GenerativeModel("gemini-2.5-flash")
