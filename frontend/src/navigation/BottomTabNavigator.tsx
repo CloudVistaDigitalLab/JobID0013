@@ -1,11 +1,14 @@
 import React from 'react';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
-import { View, Text, StyleSheet, SafeAreaView, ScrollView, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet, SafeAreaView, ScrollView, TouchableOpacity, Alert } from 'react-native';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { useNavigation } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
 
 import DashboardScreen from '../screens/DashboardScreen';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import Toast from 'react-native-toast-message';
+import ToDoScreen from '../screens/ToDoScreen';
 // import ProfileScreen from '../screens/ProfileScreen';
 // import SettingsScreen from '../screens/SettingsScreen';
 
@@ -51,8 +54,8 @@ const BottomTabNavigator: React.FC<any> = ({ route }) => {
         component={(props: any) => <DashboardScreen {...props} />}
         initialParams={{ userId }}
       />
+      <Tab.Screen name="ToDos" component={ToDoScreen} initialParams={{ userId }} />
       <Tab.Screen name="Profile" component={ProfileScreen} />
-      <Tab.Screen name="Settings" component={SettingsScreen} />
     </Tab.Navigator>
   );
 };
@@ -61,9 +64,27 @@ const BottomTabNavigator: React.FC<any> = ({ route }) => {
 const ProfileScreen: React.FC = () => {
   const navigation = useNavigation<StackNavigationProp<RootStackParamList, 'Login'>>();
 
-  const handleLogout = () => {
-    // You would implement your authentication logic here to log the user out
-    navigation.replace('Login');
+  const handleLogout = async () => {
+      try {
+          // Remove specific item
+          await AsyncStorage.removeItem('userId');
+
+          // OR if you want to clear all stored data, use:
+          // await AsyncStorage.clear();
+
+          Toast.show({
+              type: 'success',
+              text1: 'Logged Out',
+              text2: 'You have been logged out successfully.',
+              visibilityTime: 2000,
+              autoHide: true,
+          });
+
+          navigation.replace('Login');
+      } catch (error) {
+          console.error("Logout error:", error);
+          Alert.alert("Error", "Could not log out. Please try again.");
+      }
   };
 
   return (

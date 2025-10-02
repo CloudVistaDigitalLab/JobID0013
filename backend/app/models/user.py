@@ -27,6 +27,11 @@ class PerformanceReport(BaseModel):
     tasks_missed: int
     emotions_summary: dict
 
+class DailyRecommendation(BaseModel):
+    date: datetime  # store only date part (UTC)
+    recommended_tasks: List[Task] = []
+    recommended_habits: List[Habit] = []
+
 class User(BaseModel):
     id: Optional[str]
     name: str
@@ -40,6 +45,7 @@ class User(BaseModel):
     habits: List[Habit] = []
     tasks: List[Task] = []
     performance_reports: List[PerformanceReport] = []
+    daily_recommendations: List[DailyRecommendation] = []
     created_at: datetime = datetime.utcnow()
     updated_at: datetime = datetime.utcnow()
 

@@ -9,6 +9,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 type RootStackParamList = {
   Main: { userId: string };
   AddToDo: { userId: string; type: 'habit' | 'task' };
+  TodayPlan: { userId: string };
 };
 
 type DashboardScreenRouteProp = RouteProp<RootStackParamList, 'Main'>;
@@ -18,7 +19,7 @@ interface DashboardScreenProps {
 }
 const DashboardScreen: React.FC<DashboardScreenProps> = ({ route }) => {
   const [userName, setUserName] = useState<string>('User');
-  const [isModalVisible, setModalVisible] = useState<boolean>(true);
+  const [isModalVisible, setModalVisible] = useState<boolean>(false);
   const [selectedEmotion, setSelectedEmotion] = useState<string | null>(null);
   const [isCameraEmotion, setIsCameraEmotion] = useState<boolean>(false);
   const [isToDoDialogVisible, setToDoDialogVisible] = useState<boolean>(false);
@@ -26,44 +27,73 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({ route }) => {
   const [recommendedHabits, setRecommendedHabits] = useState<any[]>([]);
   const userId = route.params?.userId;
   const navigation = useNavigation<StackNavigationProp<RootStackParamList, 'Main'>>();
+  const [test, setTest] = useState<string>("");
 
   useEffect(() => {
-    const fetchUserAndRecommendations = async () => {
-      try {
-        let id = userId;
-        if (!id) {
-          id = (await AsyncStorage.getItem('userId')) ?? ""; // fallback
-        }
-        if (!id) return;
-
-        // Fetch user
-        const response = await fetch(`http://10.0.2.2:8000/users/${id}`);
-        const data = await response.json();
-        if (response.ok) {
-          setUserName(data.name);
-        } else {
-          Alert.alert("Error", data.detail || "Failed to fetch user data.");
-        }
-
-        // Fetch recommendations
-        const recRes = await fetch(`http://10.0.2.2:8000/users/${id}/recommendations`);
-        const recData = await recRes.json();
-
-        if (recRes.ok) {
-          setRecommendedTasks(recData.recommended_tasks || []);
-          setRecommendedHabits(recData.recommended_habits || []);
-        } else {
-          console.log("Recommendations error:", recData.detail);
-        }
-
-      } catch (error) {
-        console.error(error);
-        Alert.alert("Error", "Could not fetch user details or recommendations.");
+  const fetchUserAndRecommendations = async () => {
+    try {
+      let id = userId;
+      if (!id) {
+        id = (await AsyncStorage.getItem('userId')) ?? "";
       }
-    };
+      if (!id) return;
 
-    fetchUserAndRecommendations();
-  }, [userId]);
+      // Fetch user
+      const response = await fetch(`http://10.0.2.2:8000/users/${id}`);
+      const data = await response.json();
+
+      if (response.ok) {
+        setUserName(data.name);
+
+        const logs = data.emotion_logs || [];
+
+        if (logs.length > 0) {
+          // Get the latest log
+          const latestLog = logs.reduce((latest: any, current: any) => {
+            return new Date(current.timestamp) > new Date(latest.timestamp) ? current : latest;
+          });
+
+          const logDate = new Date(latestLog.timestamp);
+          const todayUTC = new Date();
+          
+          const isToday =
+            logDate.getUTCFullYear() === todayUTC.getUTCFullYear() &&
+            logDate.getUTCMonth() === todayUTC.getUTCMonth() &&
+            logDate.getUTCDate() === todayUTC.getUTCDate();
+
+          if (isToday) {
+            setSelectedEmotion(latestLog.emotion);
+            setIsCameraEmotion(latestLog.source === "AI");
+            setModalVisible(false);
+          } else {
+            setModalVisible(true);
+          }
+        } else {
+          // No logs at all
+          setModalVisible(true);
+        }
+      } else {
+        Alert.alert("Error", data.detail || "Failed to fetch user data.");
+      }
+
+      // Fetch recommendations
+      const recRes = await fetch(`http://10.0.2.2:8000/users/${id}/recommendations`);
+      const recData = await recRes.json();
+
+      if (recRes.ok) {
+        setRecommendedTasks(recData.recommended_tasks || []);
+        setRecommendedHabits(recData.recommended_habits || []);
+      } else {
+        console.log("Recommendations error:", recData.detail);
+      }
+    } catch (error) {
+      console.error(error);
+      Alert.alert("Error", "Could not fetch user details or recommendations.");
+    }
+  };
+
+  fetchUserAndRecommendations();
+}, [userId]);
 
   const handleEmotionSelected = (emotion: string, isCamera: boolean) => {
     setSelectedEmotion(emotion);
@@ -81,9 +111,9 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({ route }) => {
       <ScrollView contentContainerStyle={styles.container}>
         <Text style={styles.title}>Dashboard</Text>
         <Text style={styles.welcomeText}>Welcome, {userName}!</Text>
-        <Text style={styles.subtitle}>Your progress at a glance</Text>
+        <Text style={styles.subtitle}>Your progress at a glance {test}</Text>
 
-        <View style={styles.card}>
+        <TouchableOpacity style={styles.card} onPress={() => navigation.navigate("TodayPlan", { userId })}>
           <Text style={styles.cardTitle}>Today's Plan</Text>
           {recommendedTasks.length === 0 && recommendedHabits.length === 0 ? (
             <Text style={styles.cardText}>No recommended tasks or habits for today.</Text>
@@ -100,12 +130,17 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({ route }) => {
               ))}
             </>
           )}
-        </View>
+        </TouchableOpacity>
 
         <View style={styles.card}>
           <Text style={styles.cardTitle}>Mood Tracker</Text>
           <Text style={styles.cardText}>
-            Your current mood: {selectedEmotion || (isCameraEmotion ? "Captured via Camera" : "Happy 😊")}
+            Your current mood: 
+            {selectedEmotion 
+              ? ` ${selectedEmotion}` 
+              : isCameraEmotion 
+                ? " Captured via Camera" 
+                : " 😊"}
           </Text>
         </View>
 

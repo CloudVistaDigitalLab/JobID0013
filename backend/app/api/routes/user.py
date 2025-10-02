@@ -5,6 +5,7 @@ from bson import ObjectId
 from typing import List
 from datetime import datetime, timedelta
 import google.generativeai as genai
+from pydantic import BaseModel
 
 router = APIRouter(prefix="/users", tags=["Users"])
 
@@ -32,18 +33,15 @@ async def register(user: UserRegister, db=Depends(get_db)):
     if existing_user:
         raise HTTPException(status_code=400, detail="Email already registered")
 
-    # Hash password
-    hashed_pw = hash_password(user.password)
-
     user_dict = {
         "name": user.name,
         "email": user.email,
-        "password_hash": hashed_pw,
+        "password_hash": user.password,
     }
     print("Inserting user into DB:", user_dict)
     result = await db["users"].insert_one(user_dict)
     print("User registered with ID:", result.inserted_id)
-    return User(id=str(result.inserted_id), name=user.name, email=user.email, password_hash=hashed_pw)
+    return User(id=str(result.inserted_id), name=user.name, email=user.email, password_hash=user.password)
 
 
 # =====================
@@ -55,7 +53,7 @@ async def login(credentials: UserLogin, db=Depends(get_db)):
     if not user:
         raise HTTPException(status_code=401, detail="Invalid email or password")
 
-    if not verify_password(credentials.password, user["password_hash"]):
+    if credentials.password != user["password_hash"]:
         raise HTTPException(status_code=401, detail="Invalid email or password")
 
     return {"message": "Login successful", "user_id": str(user["_id"])}
@@ -80,7 +78,7 @@ async def get_user(user_id: str, db=Depends(get_db)):
     user = await db["users"].find_one({"_id": ObjectId(user_id)})
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
-    return User(id=str(user["_id"]), name=user["name"], email=user["email"], password_hash=user["password_hash"])
+    return User(id=str(user["_id"]), name=user["name"], email=user["email"], password_hash=user["password_hash"], emotion_logs=user.get("emotion_logs", []), habits=user.get("habits", []), tasks=user.get("tasks", []))
 
 
 # =====================
@@ -91,7 +89,7 @@ async def update_user(user_id: str, update: UserUpdate, db=Depends(get_db)):
     update_dict = {k: v for k, v in update.dict().items() if v is not None}
 
     if "password" in update_dict:
-        update_dict["password_hash"] = hash_password(update_dict.pop("password"))
+        update_dict["password_hash"] = update_dict.pop("password")
 
     result = await db["users"].update_one({"_id": ObjectId(user_id)}, {"$set": update_dict})
     if result.modified_count == 0:
@@ -288,51 +286,138 @@ async def delete_task(user_id: str, task_id: str, db=Depends(get_db)):
 # =====================
 # Get Recommendations
 # =====================
+# @router.get("/{user_id}/recommendations")
+# async def get_recommendations(user_id: str, db=Depends(get_db)):
+#     user = await db["users"].find_one({"_id": ObjectId(user_id)})
+#     if not user:
+#         raise HTTPException(status_code=404, detail="User not found")
+
+#     # 1. Get last logged emotion
+#     emotion_logs = user.get("emotion_logs", [])
+#     if not emotion_logs:
+#         raise HTTPException(status_code=400, detail="No emotion logs found for user")
+#     last_emotion = emotion_logs[-1]  # take last entry
+#     emotion_value = last_emotion['emotion']
+#     emotion_source = last_emotion['source']
+
+#     if emotion_source == 'emoji':
+#         # Find the matching label for the emoji
+#         matched_mood = next((m for m in moodEmojis if m['emoji'] == emotion_value), None)
+#         if matched_mood:
+#             # Format: '😊 Happy'
+#             display_emotion = f"{matched_mood['emoji']} {matched_mood['label']}"
+#         else:
+#             # Fallback if the emoji value isn't found in the list
+#             display_emotion = emotion_value
+#     else:
+#         # For non-emoji sources (e.g., 'text' or 'api'), use the raw value
+#         display_emotion = emotion_value
+
+#     emotion_state = f"{display_emotion} (source: {emotion_source})"
+#     print(f"Last emotion for user {user_id}: {emotion_state}")
+
+#     # 2. Get pending tasks
+#     tasks = [t for t in user.get("tasks", []) if t.get("status") != "completed"]
+
+#     # 3. Get due habits for today
+#     today = datetime.utcnow().date()
+#     habits_due = []
+#     for h in user.get("habits", []):
+#         freq = h.get("frequency", "daily")
+#         if freq == "daily":
+#             habits_due.append(h)
+#         elif freq == "weekly" and today.weekday() == 0:  # Example: due on Monday
+#             habits_due.append(h)
+#         # You can expand for "custom" logic if needed
+
+#     # 4. Prepare prompt for Gemini
+#     prompt = f"""
+#     The user is currently feeling: {emotion_state}.
+#     Here are their pending tasks: {tasks}.
+#     Here are their due habits for today: {habits_due}.
+
+#     Based on the emotion and current state, recommend which tasks and habits
+#     they should focus on right now. Only return tasks and habits relevant
+#     to this emotion and helpful for productivity and mental well-being.
+
+#     Please respond in JSON format:
+#     {{
+#         "recommended_tasks": [...],
+#         "recommended_habits": [...]
+#     }}
+#     """
+
+#     # 5. Call Gemini
+#     model = genai.GenerativeModel("gemini-2.5-flash")
+#     response = model.generate_content(prompt)
+
+#     # 6. Parse Gemini response
+#     import json
+#     import re
+
+#     raw_text = response.text.strip()
+
+#     # Remove code block markers if present
+#     clean_text = re.sub(r"^```json\s*|\s*```$", "", raw_text, flags=re.DOTALL).strip()
+
+#     try:
+#         result = json.loads(clean_text)
+#     except Exception as e:
+#         raise HTTPException(status_code=500, detail=f"Gemini response parsing failed: {str(e)}")
+    
+#     result["gemini_prompt"] = prompt 
+
+#     return result
+
 @router.get("/{user_id}/recommendations")
 async def get_recommendations(user_id: str, db=Depends(get_db)):
     user = await db["users"].find_one({"_id": ObjectId(user_id)})
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
 
-    # 1. Get last logged emotion
+    today = datetime.utcnow().date()
+
+    # 1️⃣ Check if today's recommendation exists
+    daily_recs = user.get("daily_recommendations", [])
+    today_rec = next((r for r in daily_recs if r["date"].date() == today), None)
+    
+    if today_rec:
+        # Return cached recommendation for today
+        return {
+            "recommended_tasks": today_rec["recommended_tasks"],
+            "recommended_habits": today_rec["recommended_habits"],
+            "source": "cache"
+        }
+
+    # 2️⃣ No recommendation yet, generate using Gemini
     emotion_logs = user.get("emotion_logs", [])
     if not emotion_logs:
         raise HTTPException(status_code=400, detail="No emotion logs found for user")
+
     last_emotion = emotion_logs[-1]  # take last entry
     emotion_value = last_emotion['emotion']
     emotion_source = last_emotion['source']
 
     if emotion_source == 'emoji':
-        # Find the matching label for the emoji
         matched_mood = next((m for m in moodEmojis if m['emoji'] == emotion_value), None)
-        if matched_mood:
-            # Format: '😊 Happy'
-            display_emotion = f"{matched_mood['emoji']} {matched_mood['label']}"
-        else:
-            # Fallback if the emoji value isn't found in the list
-            display_emotion = emotion_value
+        display_emotion = f"{matched_mood['emoji']} {matched_mood['label']}" if matched_mood else emotion_value
     else:
-        # For non-emoji sources (e.g., 'text' or 'api'), use the raw value
         display_emotion = emotion_value
 
     emotion_state = f"{display_emotion} (source: {emotion_source})"
-    print(f"Last emotion for user {user_id}: {emotion_state}")
 
-    # 2. Get pending tasks
     tasks = [t for t in user.get("tasks", []) if t.get("status") != "completed"]
 
-    # 3. Get due habits for today
-    today = datetime.utcnow().date()
+    today_date = datetime.utcnow().date()
     habits_due = []
     for h in user.get("habits", []):
         freq = h.get("frequency", "daily")
         if freq == "daily":
             habits_due.append(h)
-        elif freq == "weekly" and today.weekday() == 0:  # Example: due on Monday
+        elif freq == "weekly" and today_date.weekday() == 0:  # Example: due on Monday
             habits_due.append(h)
-        # You can expand for "custom" logic if needed
 
-    # 4. Prepare prompt for Gemini
+    # Prepare Gemini prompt
     prompt = f"""
     The user is currently feeling: {emotion_state}.
     Here are their pending tasks: {tasks}.
@@ -349,24 +434,96 @@ async def get_recommendations(user_id: str, db=Depends(get_db)):
     }}
     """
 
-    # 5. Call Gemini
     model = genai.GenerativeModel("gemini-2.5-flash")
     response = model.generate_content(prompt)
 
-    # 6. Parse Gemini response
-    import json
-    import re
-
-    raw_text = response.text.strip()
-
-    # Remove code block markers if present
-    clean_text = re.sub(r"^```json\s*|\s*```$", "", raw_text, flags=re.DOTALL).strip()
-
+    import json, re
+    clean_text = re.sub(r"^```json\s*|\s*```$", "", response.text.strip(), flags=re.DOTALL)
     try:
         result = json.loads(clean_text)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Gemini response parsing failed: {str(e)}")
-    
-    result["gemini_prompt"] = prompt 
 
+    # 3️⃣ Save today's recommendation in DB
+    rec_entry = {
+        "date": datetime.utcnow(),
+        "recommended_tasks": result.get("recommended_tasks", []),
+        "recommended_habits": result.get("recommended_habits", [])
+    }
+
+    await db["users"].update_one(
+        {"_id": ObjectId(user_id)},
+        {"$push": {"daily_recommendations": rec_entry}}
+    )
+
+    result["source"] = "gemini"
     return result
+
+class TaskStatusUpdate(BaseModel):
+    status: str
+
+# Update task status in daily recommendation for today
+@router.patch("/{user_id}/daily_recommendations/tasks/{task_id}/status")
+async def update_daily_task_status(user_id: str, task_id: str, body: TaskStatusUpdate, db=Depends(get_db)):
+    status = body.status
+    today = datetime.utcnow().date()
+
+    # Update task in user.tasks
+    await db["users"].update_one(
+        {"_id": ObjectId(user_id), "tasks.task_id": task_id},
+        {"$set": {"tasks.$.status": status}}
+    )
+
+    # Update task in daily_recommendations for today
+    result = await db["users"].update_one(
+        {
+            "_id": ObjectId(user_id),
+            "daily_recommendations.date": {"$gte": datetime(today.year, today.month, today.day),
+                                           "$lt": datetime(today.year, today.month, today.day) + timedelta(days=1)},
+            "daily_recommendations.recommended_tasks.task_id": task_id
+        },
+        {"$set": {"daily_recommendations.$[rec].recommended_tasks.$[t].status": status}},
+        array_filters=[{"rec.date": {"$gte": datetime(today.year, today.month, today.day),
+                                     "$lt": datetime(today.year, today.month, today.day) + timedelta(days=1)}},
+                       {"t.task_id": task_id}]
+    )
+
+    return {"message": "Task status updated successfully"}
+
+
+# Update habit progress in daily recommendation for today
+@router.patch("/{user_id}/daily_recommendations/habits/{habit_id}/complete")
+async def complete_daily_habit(user_id: str, habit_id: str, db=Depends(get_db)):
+    today = datetime.utcnow().date()
+
+    user = await db["users"].find_one({"_id": ObjectId(user_id)})
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    # Find habit in user's habits
+    habit = next((h for h in user.get("habits", []) if h["habit_id"] == habit_id), None)
+    if not habit:
+        raise HTTPException(status_code=404, detail="Habit not found")
+
+    # Increment progress (assume daily increment)
+    new_progress = habit.get("progress", 0) + 1
+    await db["users"].update_one(
+        {"_id": ObjectId(user_id), "habits.habit_id": habit_id},
+        {"$set": {"habits.$.progress": new_progress}}
+    )
+
+    # Update progress in today's daily recommendation
+    await db["users"].update_one(
+        {
+            "_id": ObjectId(user_id),
+            "daily_recommendations.date": {"$gte": datetime(today.year, today.month, today.day),
+                                           "$lt": datetime(today.year, today.month, today.day) + timedelta(days=1)},
+            "daily_recommendations.recommended_habits.habit_id": habit_id
+        },
+        {"$set": {"daily_recommendations.$[rec].recommended_habits.$[h].progress": new_progress}},
+        array_filters=[{"rec.date": {"$gte": datetime(today.year, today.month, today.day),
+                                     "$lt": datetime(today.year, today.month, today.day) + timedelta(days=1)}},
+                       {"h.habit_id": habit_id}]
+    )
+
+    return {"message": "Habit marked completed for today", "progress": new_progress}
