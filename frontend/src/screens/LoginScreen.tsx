@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, TextInput, TouchableOpacity, SafeAreaView, Alert } from 'react-native';
+import { View, Text, StyleSheet, TextInput, TouchableOpacity, SafeAreaView, Alert, Image } from 'react-native';
 import { StackNavigationProp } from '@react-navigation/stack';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import Toast from 'react-native-toast-message';
@@ -55,6 +55,7 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ navigation }) => {
     return (
         <SafeAreaView style={styles.safeArea}>
             <View style={styles.container}>
+                <Image source={require('../assets/logo/logo_without_text.png')} style={{ width: 120, height: 120, marginBottom: 20 }} />
                 <Text style={styles.title}>Welcome Back</Text>
                 <Text style={styles.subtitle}>Sign in to your account</Text>
 
@@ -92,7 +93,7 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ navigation }) => {
 const styles = StyleSheet.create({
     safeArea: {
         flex: 1,
-        backgroundColor: '#F3F4F6',
+        backgroundColor: '#fff',
     },
     container: {
         flex: 1,
@@ -103,8 +104,8 @@ const styles = StyleSheet.create({
     title: {
         fontSize: 32,
         fontWeight: 'bold',
-        color: '#1F2937',
-        marginBottom: 10,
+        color: '#3d7bac',
+        marginBottom: 4,
     },
     subtitle: {
         fontSize: 16,
@@ -123,7 +124,7 @@ const styles = StyleSheet.create({
     button: {
         width: '100%',
         height: 50,
-        backgroundColor: '#4B5563',
+        backgroundColor: '#3d7bac',
         borderRadius: 10,
         justifyContent: 'center',
         alignItems: 'center',
@@ -140,7 +141,7 @@ const styles = StyleSheet.create({
         color: '#6B7280',
     },
     link: {
-        color: '#4B5563',
+        color: '#3d7bac',
         fontWeight: 'bold',
     },
 });

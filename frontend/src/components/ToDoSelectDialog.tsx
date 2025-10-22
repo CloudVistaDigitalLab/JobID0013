@@ -48,7 +48,7 @@ const styles = StyleSheet.create({
     marginBottom: 15,
   },
   option: {
-    backgroundColor: '#3B82F6',
+    backgroundColor: '#3d7bac',
     paddingVertical: 10,
     paddingHorizontal: 20,
     borderRadius: 10,
@@ -61,10 +61,16 @@ const styles = StyleSheet.create({
     fontSize: 16,
   },
   closeButton: {
-    marginTop: 10,
+    backgroundColor: '#EF4444',
+    paddingVertical: 10,
+    paddingHorizontal: 20,
+    borderRadius: 10,
+    marginVertical: 5,
+    width: '100%',
+    alignItems: 'center',
   },
   closeText: {
-    color: '#EF4444',
+    color: '#fff',
     fontSize: 16,
   },
 });

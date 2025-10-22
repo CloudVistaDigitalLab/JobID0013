@@ -37,7 +37,19 @@ const App: React.FC = () => {
 
   return (
     <NavigationContainer>
-      <Stack.Navigator initialRouteName="Splash">
+      <Stack.Navigator
+        initialRouteName="Splash"
+        screenOptions={{
+        headerTitleStyle: {
+          fontSize: 28,
+          fontWeight: 'bold',
+          color: '#3d7bac',
+        },
+        headerStyle: {
+          backgroundColor: '#f9f9f9',
+        },
+      }}
+    >
         <Stack.Screen name="Splash" component={SplashScreen} options={{ headerShown: false }} />
         <Stack.Screen name="Onboarding" component={OnboardingScreen} options={{ headerShown: false }} />
         <Stack.Screen name="Login" component={LoginScreen} options={{ headerShown: false }} />

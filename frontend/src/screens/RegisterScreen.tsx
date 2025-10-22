@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, TextInput, TouchableOpacity, SafeAreaView, Alert } from 'react-native';
+import { View, Text, StyleSheet, TextInput, TouchableOpacity, SafeAreaView, Alert, Image } from 'react-native';
 import { StackNavigationProp } from '@react-navigation/stack';
 
 type RootStackParamList = {
@@ -44,6 +44,7 @@ const RegisterScreen: React.FC<RegisterScreenProps> = ({ navigation }) => {
   return (
     <SafeAreaView style={styles.safeArea}>
       <View style={styles.container}>
+        <Image source={require('../assets/logo/logo_without_text.png')} style={{ width: 120, height: 120, marginBottom: 20 }} />
         <Text style={styles.title}>Create Account</Text>
         <Text style={styles.subtitle}>Sign up to get started</Text>
 
@@ -89,7 +90,7 @@ const RegisterScreen: React.FC<RegisterScreenProps> = ({ navigation }) => {
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: '#F3F4F6',
+    backgroundColor: '#fff',
   },
   container: {
     flex: 1,
@@ -100,8 +101,8 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 32,
     fontWeight: 'bold',
-    color: '#1F2937',
-    marginBottom: 10,
+    color: '#3d7bac',
+    marginBottom: 4,
   },
   subtitle: {
     fontSize: 16,
@@ -120,7 +121,7 @@ const styles = StyleSheet.create({
   button: {
     width: '100%',
     height: 50,
-    backgroundColor: '#4B5563',
+    backgroundColor: '#3d7bac',
     borderRadius: 10,
     justifyContent: 'center',
     alignItems: 'center',
@@ -137,7 +138,7 @@ const styles = StyleSheet.create({
     color: '#6B7280',
   },
   link: {
-    color: '#4B5563',
+    color: '#3d7bac',
     fontWeight: 'bold',
   },
 });

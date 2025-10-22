@@ -21,6 +21,139 @@ moodEmojis = [
     { "emoji": "😡", "label": "Angry" }
 ]
 
+async def regenerate_daily_recommendations(user_id: str, db):
+    user = await db["users"].find_one({"_id": ObjectId(user_id)})
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    # Get emotion
+    emotion_logs = user.get("emotion_logs", [])
+    if not emotion_logs:
+        raise HTTPException(status_code=400, detail="No emotion logs found for user")
+
+    last_emotion = emotion_logs[-1]
+    emotion_value = last_emotion["emotion"]
+    emotion_source = last_emotion["source"]
+
+    if emotion_source == "emoji":
+        matched_mood = next((m for m in moodEmojis if m["emoji"] == emotion_value), None)
+        display_emotion = f"{matched_mood['emoji']} {matched_mood['label']}" if matched_mood else emotion_value
+    else:
+        display_emotion = emotion_value
+
+    emotion_state = f"{display_emotion} (source: {emotion_source})"
+    tasks = [t for t in user.get("tasks", []) if t.get("status") != "completed"]
+
+    today = datetime.utcnow().date()
+    habits_due = []
+    for h in user.get("habits", []):
+        freq = h.get("frequency", "daily")
+        if freq == "daily":
+            habits_due.append(h)
+        elif freq == "weekly" and today.weekday() == 0:
+            habits_due.append(h)
+
+    prompt = f"""
+    You are a strict, deterministic recommendation engine. Using ONLY the input data below, select **only** the tasks and habits that are appropriate to perform *today* for the user given their current emotional state. Follow these rules exactly.
+
+    INPUT (only use these values; do not invent extra fields):
+    - emotion_state: {emotion_state}
+    - tasks: {tasks}
+    - habits_due: {habits_due}
+
+    RULES & SELECTION LOGIC
+    1) OUTPUT FORMAT (must be returned EXACTLY as JSON, no extra text):
+    recommended_tasks: neet to include following fields for each task:
+    - task_id: string (from input)
+    - title: string (from input)
+    - description: string (from input)
+    - due_date: ISO 8601 date string (from input)
+    - status: string (from input)
+    - score: integer (0-100) representing how suitable this task is for today given the emotion
+    - reason: single-sentence string explaining why this task is recommended based on the emotion
+    recommended_habits: need to include following fields for each habit:
+    - habit_id: string (from input)
+    - title: string (from input)
+    - description: string (from input)
+    - frequency: string (from input)
+    - progress: number (from input)
+    - score: integer (0-100) representing how suitable this habit is for today given the emotion
+    - reason: single-sentence string explaining why this habit is recommended based on the emotion
+    
+    {{
+    "recommended_tasks": [...],
+    "recommended_habits": [...]
+    }}
+
+    2) TASK RULES
+    - Consider only tasks present in the `tasks` list and that are not completed.
+    - **Always** prefer tasks that are actionable today and appropriate for the user's current emotional state.
+    - For low-energy emotions (Sad, Fear, Disgust, Angry): favor low-effort tasks (estimated_minutes <= 30 or energy_required == "low") or short, high-priority tasks.
+    - For neutral/positive emotions (Neutral, Happy, Surprise): allow medium / higher-effort tasks if they are high priority or due soon.
+    - If `estimated_minutes`, `priority`, `due_date`, or `energy_required` exist, use them to compute suitability. If fields are missing, make conservative inferences (prefer short/low-effort tasks for low-energy emotions).
+    - Assign each recommended task a `score` 0-100 combining priority, urgency, and emotional suitability. Higher score = better fit.
+    - Provide a single-sentence `reason` mentioning the emotion and why the task is appropriate.
+
+    3) HABIT RULES
+    - Consider only habits present in `habits_due`.
+    - **If a habit has `frequency == "daily" DO NOT recommend it for today UNLESS at least one of the following is true:**
+    a) The habit explicitly contains a field that indicates it must be done today (e.g., `force_today: true`), or
+    b) The habit includes an explicit `allowed_emotions` list and the current emotion matches one of those values, or
+    c) The habit is very short (estimated_minutes <= 10 or energy_required == "low") AND has high priority.
+    - For non-daily habits (weekly/custom), recommend only when they are due today and compatible with emotion.
+    - If habit metadata is missing, default to **not** recommending daily habits unless they are clearly low-effort & high-priority.
+    - Assign each recommended habit a `score` 0-100 and a one-line `reason` referencing emotion compatibility.
+
+    4) GENERAL & SAFETY
+    - Never recommend items that are already completed or clearly not due today.
+    - Do not recommend a habit just because it is "daily" — daily habits are excluded by default unless the exceptions above apply.
+    - If no tasks or habits meet the criteria, return empty arrays.
+    - If uncertain about compatibility, be conservative (prefer not to recommend).
+    - Output must be valid JSON only (no surrounding markdown, comments, or explanation).
+
+    DATA (use exactly this; do not invent extra context):
+    emotion_state: {emotion_state}
+    tasks: {tasks}
+    habits_due: {habits_due}
+
+    Return the JSON now.
+    """
+
+    print("Gemini prompt:", prompt)
+    
+    model = genai.GenerativeModel("gemini-2.5-flash")
+    response = model.generate_content(prompt)
+
+    import json, re
+    clean_text = re.sub(r"^```json\s*|\s*```$", "", response.text.strip(), flags=re.DOTALL)
+
+    try:
+        result = json.loads(clean_text)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Gemini response parsing failed: {str(e)}")
+
+    rec_entry = {
+        "date": datetime.utcnow(),
+        "recommended_tasks": result.get("recommended_tasks", []),
+        "recommended_habits": result.get("recommended_habits", [])
+    }
+
+    # Replace today’s recommendation instead of adding new
+    await db["users"].update_one(
+        {"_id": ObjectId(user_id)},
+        {"$pull": {"daily_recommendations": {
+            "date": {"$gte": datetime(today.year, today.month, today.day),
+                     "$lt": datetime(today.year, today.month, today.day) + timedelta(days=1)}
+        }}}
+    )
+
+    await db["users"].update_one(
+        {"_id": ObjectId(user_id)},
+        {"$push": {"daily_recommendations": rec_entry}}
+    )
+
+    return result
+
 # =====================
 # Register
 # =====================
@@ -87,8 +220,7 @@ async def get_user(user_id: str, db=Depends(get_db)):
 async def update_user(user_id: str, update: UserUpdate, db=Depends(get_db)):
     update_dict = {k: v for k, v in update.dict().items() if v is not None}
 
-    if "password" in update_dict:
-        update_dict["password_hash"] = update_dict.pop("password")
+    
 
     result = await db["users"].update_one({"_id": ObjectId(user_id)}, {"$set": update_dict})
     if result.modified_count == 0:
@@ -96,6 +228,21 @@ async def update_user(user_id: str, update: UserUpdate, db=Depends(get_db)):
 
     updated_user = await db["users"].find_one({"_id": ObjectId(user_id)})
     return User(id=str(updated_user["_id"]), name=updated_user["name"], email=updated_user["email"], password_hash=updated_user["password_hash"])
+
+@router.patch("/{user_id}/password")
+async def change_password(user_id: str, new_password: str, old_password: str, db=Depends(get_db)):
+    user = await db["users"].find_one({"_id": ObjectId(user_id)})
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    if user["password_hash"] != old_password:
+        raise HTTPException(status_code=401, detail="Old password is incorrect")
+
+    await db["users"].update_one(
+        {"_id": ObjectId(user_id)},
+        {"$set": {"password_hash": new_password}}
+    )
+    return {"message": "Password updated successfully"}
 
 
 # =====================
@@ -145,6 +292,8 @@ async def add_habit(user_id: str, habit: Habit, db=Depends(get_db)):
         {"_id": ObjectId(user_id)},
         {"$push": {"habits": habit_dict}}
     )
+
+    await regenerate_daily_recommendations(user_id, db)
     return {"message": "Habit added successfully"}
 
 
@@ -180,6 +329,7 @@ async def update_habit(user_id: str, habit_id: str, habit_update: Habit, db=Depe
         raise HTTPException(status_code=404, detail="Habit not found or no changes made")
 
     updated_user = await db["users"].find_one({"_id": ObjectId(user_id)})
+    await regenerate_daily_recommendations(user_id, db)
     for h in updated_user.get("habits", []):
         if h["habit_id"] == habit_id:
             return h
@@ -204,6 +354,8 @@ async def delete_habit(user_id: str, habit_id: str, db=Depends(get_db)):
     )
     if result.modified_count == 0:
         raise HTTPException(status_code=404, detail="Habit not found")
+
+    await regenerate_daily_recommendations(user_id, db)
     return {"message": "Habit deleted successfully"}
 
 
@@ -221,6 +373,7 @@ async def add_task(user_id: str, task: Task, db=Depends(get_db)):
         {"_id": ObjectId(user_id)},
         {"$push": {"tasks": task_dict}}
     )
+    await regenerate_daily_recommendations(user_id, db)
     return {"message": "Task added successfully"}
 
 
@@ -256,6 +409,7 @@ async def update_task(user_id: str, task_id: str, task_update: Task, db=Depends(
         raise HTTPException(status_code=404, detail="Task not found or no changes made")
 
     updated_user = await db["users"].find_one({"_id": ObjectId(user_id)})
+    await regenerate_daily_recommendations(user_id, db)
     for t in updated_user.get("tasks", []):
         if t["task_id"] == task_id:
             return t
@@ -280,6 +434,8 @@ async def delete_task(user_id: str, task_id: str, db=Depends(get_db)):
     )
     if result.modified_count == 0:
         raise HTTPException(status_code=404, detail="Task not found")
+
+    await regenerate_daily_recommendations(user_id, db)
     return {"message": "Task deleted successfully"}
 
 # =====================
@@ -428,9 +584,26 @@ async def get_recommendations(user_id: str, db=Depends(get_db)):
 
     RULES & SELECTION LOGIC
     1) OUTPUT FORMAT (must be returned EXACTLY as JSON, no extra text):
+    recommended_tasks: neet to include following fields for each task:
+    - task_id: string (from input)
+    - title: string (from input)
+    - description: string (from input)
+    - due_date: ISO 8601 date string (from input)
+    - status: string (from input)
+    - score: integer (0-100) representing how suitable this task is for today given the emotion
+    - reason: single-sentence string explaining why this task is recommended based on the emotion
+    recommended_habits: need to include following fields for each habit:
+    - habit_id: string (from input)
+    - title: string (from input)
+    - description: string (from input)
+    - frequency: string (from input)
+    - progress: number (from input)
+    - score: integer (0-100) representing how suitable this habit is for today given the emotion
+    - reason: single-sentence string explaining why this habit is recommended based on the emotion
+    
     {{
-    "recommended_tasks": [....],
-    "recommended_habits": [....]
+    "recommended_tasks": [...],
+    "recommended_habits": [...]
     }}
 
     2) TASK RULES
@@ -466,9 +639,10 @@ async def get_recommendations(user_id: str, db=Depends(get_db)):
 
     Return the JSON now.
     """
-
+    print("Gemini prompt:", prompt)
     model = genai.GenerativeModel("gemini-2.5-flash")
     response = model.generate_content(prompt)
+    print("Gemini raw response:", response.text)
 
     import json, re
     clean_text = re.sub(r"^```json\s*|\s*```$", "", response.text.strip(), flags=re.DOTALL)
@@ -521,6 +695,20 @@ async def update_daily_task_status(user_id: str, task_id: str, body: TaskStatusU
                        {"t.task_id": task_id}]
     )
 
+    task = await db["users"].find_one(
+        {"_id": ObjectId(user_id), "tasks.task_id": task_id},
+        {"tasks.$": 1}
+    )
+
+    status_text = "Completed" if status == "completed" else "Started"
+
+    recentActivity = status_text + " '" + task['tasks'][0]['title'] + "'"
+
+    await db["users"].update_one(
+        {"_id": ObjectId(user_id)},
+        {"$push": {"recentActivities": recentActivity}}
+    )
+
     return {"message": "Task status updated successfully"}
 
 
@@ -560,3 +748,11 @@ async def complete_daily_habit(user_id: str, habit_id: str, db=Depends(get_db)):
     )
 
     return {"message": "Habit marked completed for today", "progress": new_progress}
+
+
+@router.get("/{user_id}/recent_activities", response_model=List[str])
+async def get_recent_activities(user_id: str, db=Depends(get_db)):
+    user = await db["users"].find_one({"_id": ObjectId(user_id)})
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    return user.get("recentActivities", [])

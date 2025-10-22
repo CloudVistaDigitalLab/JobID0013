@@ -275,7 +275,7 @@ const styles = StyleSheet.create({
     zIndex: 10,
   },
   button: {
-    backgroundColor: "#333",
+    backgroundColor: "#3d7bac",
     padding: 15,
     borderRadius: 50,
     marginVertical: 8,
@@ -292,7 +292,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   moodButton: {
-    backgroundColor: '#333',
+    backgroundColor: '#3d7bac',
     padding: 10,
     borderRadius: 50,
     margin: 5,

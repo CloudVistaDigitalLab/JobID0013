@@ -9,6 +9,7 @@ import DashboardScreen from '../screens/DashboardScreen';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import Toast from 'react-native-toast-message';
 import ToDoScreen from '../screens/ToDoScreen';
+import ProfileScreen from '../screens/ProfileScreen';
 // import ProfileScreen from '../screens/ProfileScreen';
 // import SettingsScreen from '../screens/SettingsScreen';
 
@@ -55,66 +56,15 @@ const BottomTabNavigator: React.FC<any> = ({ route }) => {
         initialParams={{ userId }}
       />
       <Tab.Screen name="ToDos" component={ToDoScreen} initialParams={{ userId }} />
-      <Tab.Screen name="Profile" component={ProfileScreen} />
+      <Tab.Screen
+        name="Profile"
+        component={(props: any) => <ProfileScreen {...props} />}
+      />
     </Tab.Navigator>
   );
 };
 
-// Dummy Profile and Settings screens
-const ProfileScreen: React.FC = () => {
-  const navigation = useNavigation<StackNavigationProp<RootStackParamList, 'Login'>>();
 
-  const handleLogout = async () => {
-      try {
-          // Remove specific item
-          await AsyncStorage.removeItem('userId');
-
-          // OR if you want to clear all stored data, use:
-          // await AsyncStorage.clear();
-
-          Toast.show({
-              type: 'success',
-              text1: 'Logged Out',
-              text2: 'You have been logged out successfully.',
-              visibilityTime: 2000,
-              autoHide: true,
-          });
-
-          navigation.replace('Login');
-      } catch (error) {
-          console.error("Logout error:", error);
-          Alert.alert("Error", "Could not log out. Please try again.");
-      }
-  };
-
-  return (
-    <SafeAreaView style={styles.container}>
-      <ScrollView contentContainerStyle={styles.scrollContent}>
-        <View style={styles.profileHeader}>
-          <Ionicons name="person-circle-outline" size={100} color="#4B5563" />
-          <Text style={styles.profileName}>Student User</Text>
-          <Text style={styles.profileEmail}>student.user@example.com</Text>
-        </View>
-
-        <View style={styles.card}>
-          <Text style={styles.cardTitle}>Account Information</Text>
-          <Text style={styles.cardText}>Username: studentuser</Text>
-          <Text style={styles.cardText}>Joined: January 2024</Text>
-        </View>
-
-        <View style={styles.card}>
-          <Text style={styles.cardTitle}>Usage Stats</Text>
-          <Text style={styles.cardText}>Habits Tracked: 50</Text>
-          <Text style={styles.cardText}>Emotions Logged: 120</Text>
-        </View>
-
-        <TouchableOpacity style={styles.button} onPress={handleLogout}>
-          <Text style={styles.buttonText}>Log Out</Text>
-        </TouchableOpacity>
-      </ScrollView>
-    </SafeAreaView>
-  );
-};
 
 const SettingsScreen: React.FC = () => {
   return (

@@ -10,7 +10,7 @@ from app.core.database import connect_to_mongo, close_mongo_connection
 from app.api.routes import user
 
 # Load environment variables
-genai.configure(api_key="AIzaSyDlUOj0wS0GdCZItEKufQ1SzPt-6OrLWFA")
+genai.configure(api_key="AIzaSyBL0Q070vD1DatPennOFBDw0RDB7ncNH0k")
 
 # Load your trained YOLOv11 model
 model = YOLO("app/models/best.pt")

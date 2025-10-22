@@ -61,10 +61,10 @@ const SplashScreen: React.FC<SplashScreenProps> = ({ navigation }) => {
     return (
         <View style={styles.container}>
             <Image
-                //source={require('../../assets/logo.png')} // Replace with your logo image path
+                source={require('../assets/logo/logo.png')}
                 style={styles.logo}
             />
-            <Text style={styles.title}>EvoMind</Text>
+            {/* <Text style={styles.title}>EvoMind</Text> */}
             <ActivityIndicator size="large" color="#4B5563" style={styles.spinner} />
         </View>
     );
@@ -73,7 +73,7 @@ const SplashScreen: React.FC<SplashScreenProps> = ({ navigation }) => {
 const styles = StyleSheet.create({
     container: {
         flex: 1,
-        backgroundColor: '#F3F4F6',
+        backgroundColor: '#fff',
         justifyContent: 'center',
         alignItems: 'center',
     },

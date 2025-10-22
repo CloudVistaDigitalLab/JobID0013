@@ -1,6 +1,6 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { View, Text, StyleSheet, SafeAreaView, ScrollView, Alert, TouchableOpacity } from 'react-native';
-import { RouteProp, useNavigation } from '@react-navigation/native';
+import { RouteProp, useNavigation, useFocusEffect } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
 import EmotionDialog from '../components/EmotionDialog';
 import ToDoSelectDialog from '../components/ToDoSelectDialog';
@@ -17,6 +17,7 @@ type DashboardScreenRouteProp = RouteProp<RootStackParamList, 'Main'>;
 interface DashboardScreenProps {
   route: DashboardScreenRouteProp;
 }
+
 const DashboardScreen: React.FC<DashboardScreenProps> = ({ route }) => {
   const [userName, setUserName] = useState<string>('User');
   const [isModalVisible, setModalVisible] = useState<boolean>(false);
@@ -27,74 +28,119 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({ route }) => {
   const [recommendedHabits, setRecommendedHabits] = useState<any[]>([]);
   const userId = route.params?.userId;
   const navigation = useNavigation<StackNavigationProp<RootStackParamList, 'Main'>>();
-  const [test, setTest] = useState<string>("");
+  const [recentActivities, setRecentActivities] = useState<string[]>([]);
 
+  // 🧩 1️⃣ Fetch user details (on mount)
   useEffect(() => {
-  const fetchUserAndRecommendations = async () => {
-    try {
-      let id = userId;
-      if (!id) {
-        id = (await AsyncStorage.getItem('userId')) ?? "";
-      }
-      if (!id) return;
+    const fetchUserDetails = async () => {
+      try {
+        let id = userId;
+        if (!id) {
+          id = (await AsyncStorage.getItem('userId')) ?? "";
+        }
+        if (!id) return;
 
-      // Fetch user
-      const response = await fetch(`http://10.0.2.2:8000/users/${id}`);
-      const data = await response.json();
+        const response = await fetch(`http://10.0.2.2:8000/users/${id}`);
+        const data = await response.json();
 
-      if (response.ok) {
-        setUserName(data.name);
+        if (response.ok) {
+          setUserName(data.name);
 
-        const logs = data.emotion_logs || [];
+          const logs = data.emotion_logs || [];
 
-        if (logs.length > 0) {
-          // Get the latest log
-          const latestLog = logs.reduce((latest: any, current: any) => {
-            return new Date(current.timestamp) > new Date(latest.timestamp) ? current : latest;
-          });
+          if (logs.length > 0) {
+            const latestLog = logs.reduce((latest: any, current: any) =>
+              new Date(current.timestamp) > new Date(latest.timestamp) ? current : latest
+            );
 
-          const logDate = new Date(latestLog.timestamp);
-          const todayUTC = new Date();
-          
-          const isToday =
-            logDate.getUTCFullYear() === todayUTC.getUTCFullYear() &&
-            logDate.getUTCMonth() === todayUTC.getUTCMonth() &&
-            logDate.getUTCDate() === todayUTC.getUTCDate();
+            const logDate = new Date(latestLog.timestamp);
+            const todayUTC = new Date();
 
-          if (isToday) {
-            setSelectedEmotion(latestLog.emotion);
-            setIsCameraEmotion(latestLog.source === "AI");
-            setModalVisible(false);
+            const isToday =
+              logDate.getFullYear() === todayUTC.getFullYear() &&
+              logDate.getMonth() === todayUTC.getMonth() &&
+              logDate.getDate() === todayUTC.getDate();
+
+            if (isToday) {
+              setSelectedEmotion(latestLog.emotion);
+              setIsCameraEmotion(latestLog.source === "AI");
+              setModalVisible(false);
+            } else {
+              setModalVisible(true);
+            }
           } else {
             setModalVisible(true);
           }
         } else {
-          // No logs at all
-          setModalVisible(true);
+          Alert.alert("Error", data.detail || "Failed to fetch user data.");
         }
-      } else {
-        Alert.alert("Error", data.detail || "Failed to fetch user data.");
+      } catch (error) {
+        console.error(error);
+        Alert.alert("Error", "Could not fetch user details.");
       }
+    };
 
-      // Fetch recommendations
-      const recRes = await fetch(`http://10.0.2.2:8000/users/${id}/recommendations`);
-      const recData = await recRes.json();
+    fetchUserDetails();
+  }, [userId]);
 
-      if (recRes.ok) {
-        setRecommendedTasks(recData.recommended_tasks || []);
-        setRecommendedHabits(recData.recommended_habits || []);
-      } else {
-        console.log("Recommendations error:", recData.detail);
-      }
-    } catch (error) {
-      console.error(error);
-      Alert.alert("Error", "Could not fetch user details or recommendations.");
-    }
-  };
+  // 🧩 2️⃣ Fetch recommendations (every time screen focuses)
+  useFocusEffect(
+    useCallback(() => {
+      const fetchRecommendations = async () => {
+        try {
+          let id = userId;
+          if (!id) {
+            id = (await AsyncStorage.getItem('userId')) ?? "";
+          }
+          if (!id) return;
 
-  fetchUserAndRecommendations();
-}, [userId]);
+          const recRes = await fetch(`http://10.0.2.2:8000/users/${id}/recommendations`);
+          const recData = await recRes.json();
 
+          if (recRes.ok) {
+            setRecommendedTasks(recData.recommended_tasks || []);
+            setRecommendedHabits(recData.recommended_habits || []);
+          } else {
+            console.log("Recommendations error:", recData.detail);
+          }
+        } catch (error) {
+          console.error(error);
+        }
+      };
+
+      fetchRecommendations();
+    }, [userId])
+  );
+
+  useFocusEffect(
+    useCallback(() => {
+      const fetchRecentActivities = async () => {
+        try {
+          let id = userId;
+          if (!id) {
+            id = (await AsyncStorage.getItem('userId')) ?? "";
+          }
+          if (!id) return;
+
+          const response = await fetch(
+            `http://10.0.2.2:8000/users/${id}/recent_activities`
+          )
+          if (response.ok) {
+            const data = await response.json();
+            setRecentActivities(data);
+          } else {
+            console.error("Failed to fetch recent activities");
+          }
+        } catch (error) {
+          console.error(error);
+        }
+      };
+
+      fetchRecentActivities();
+    }, [userId])
+  );
+
+  // 🧩 3️⃣ Handlers
   const handleEmotionSelected = (emotion: string, isCamera: boolean) => {
     setSelectedEmotion(emotion);
     setIsCameraEmotion(isCamera);
@@ -111,7 +157,7 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({ route }) => {
       <ScrollView contentContainerStyle={styles.container}>
         <Text style={styles.title}>Dashboard</Text>
         <Text style={styles.welcomeText}>Welcome, {userName}!</Text>
-        <Text style={styles.subtitle}>Your progress at a glance {test}</Text>
+        <Text style={styles.subtitle}>Your progress at a glance</Text>
 
         <TouchableOpacity style={styles.card} onPress={() => navigation.navigate("TodayPlan", { userId })}>
           <Text style={styles.cardTitle}>Today's Plan</Text>
@@ -123,11 +169,17 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({ route }) => {
               {recommendedTasks.map((task, idx) => (
                 <Text key={idx} style={styles.cardText}>- {task.title}</Text>
               ))}
+              {recommendedTasks.length === 0 && (
+                <Text style={styles.cardText}>No tasks available for today plan.</Text>
+              )}
 
               <Text style={[styles.cardText, { fontWeight: "600", marginTop: 10 }]}>Habits:</Text>
               {recommendedHabits.map((habit, idx) => (
                 <Text key={idx} style={styles.cardText}>- {habit.title}</Text>
               ))}
+              {recommendedHabits.length === 0 && (
+                <Text style={styles.cardText}>No habbits available for today plan.</Text>
+              )}
             </>
           )}
         </TouchableOpacity>
@@ -135,7 +187,7 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({ route }) => {
         <View style={styles.card}>
           <Text style={styles.cardTitle}>Mood Tracker</Text>
           <Text style={styles.cardText}>
-            Your current mood: 
+            Your current mood:
             {selectedEmotion 
               ? ` ${selectedEmotion}` 
               : isCameraEmotion 
@@ -146,8 +198,13 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({ route }) => {
 
         <View style={styles.card}>
           <Text style={styles.cardTitle}>Recent Activity</Text>
-          <Text style={styles.cardText}>- Completed "Math Homework"</Text>
-          <Text style={styles.cardText}>- Started "Reading Chapter 5"</Text>
+          {recentActivities.length === 0 ? (
+            <Text style={styles.cardText}>No recent activities.</Text>
+          ) : (
+            [...recentActivities].slice(-5).reverse().map((activity, idx) => (
+              <Text key={idx} style={styles.cardText}>- {activity}</Text>
+            ))
+          )}
         </View>
       </ScrollView>
 
@@ -158,48 +215,20 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({ route }) => {
         <Text style={styles.addButtonText}>＋</Text>
       </TouchableOpacity>
 
-
-      <EmotionDialog
-        visible={isModalVisible}
-        onEmotionSelected={handleEmotionSelected}
-      />
-
-      <ToDoSelectDialog
-        visible={isToDoDialogVisible}
-        onSelect={handleToDoSelect}
-        onClose={() => setToDoDialogVisible(false)}
-      />
+      <EmotionDialog visible={isModalVisible} onEmotionSelected={handleEmotionSelected} />
+      <ToDoSelectDialog visible={isToDoDialogVisible} onSelect={handleToDoSelect} onClose={() => setToDoDialogVisible(false)} />
     </SafeAreaView>
   );
 };
 
 const styles = StyleSheet.create({
-  safeArea: {
-    flex: 1,
-    backgroundColor: '#F3F4F6',
-  },
-  container: {
-    padding: 20,
-  },
-  title: {
-    fontSize: 28,
-    fontWeight: 'bold',
-    color: '#1F2937',
-    marginBottom: 5,
-  },
-  welcomeText: {
-    fontSize: 20,
-    color: '#374151',
-    fontWeight: '600',
-    marginBottom: 10,
-  },
-  subtitle: {
-    fontSize: 16,
-    color: '#6B7280',
-    marginBottom: 20,
-  },
+  safeArea: { flex: 1, backgroundColor: '#fff' },
+  container: { padding: 20 },
+  title: { fontSize: 28, fontWeight: 'bold', color: '#3d7bac', marginBottom: 5 },
+  welcomeText: { fontSize: 20, color: '#374151', fontWeight: '600', marginBottom: 4 },
+  subtitle: { fontSize: 16, color: '#6B7280', marginBottom: 20 },
   card: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: '#f6d581ff',
     padding: 20,
     borderRadius: 15,
     marginBottom: 20,
@@ -209,22 +238,13 @@ const styles = StyleSheet.create({
     shadowRadius: 5,
     elevation: 3,
   },
-  cardTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#1F2937',
-    marginBottom: 10,
-  },
-  cardText: {
-    fontSize: 16,
-    color: '#374151',
-    marginBottom: 5,
-  },
+  cardTitle: { fontSize: 18, fontWeight: 'bold', color: '#1F2937', marginBottom: 10 },
+  cardText: { fontSize: 16, color: '#374151', marginBottom: 5 },
   addButton: {
     position: 'absolute',
     bottom: 30,
     right: 20,
-    backgroundColor: '#3B82F6',
+    backgroundColor: '#3d7bac',
     width: 60,
     height: 60,
     borderRadius: 30,
@@ -232,11 +252,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     elevation: 5,
   },
-  addButtonText: {
-    color: 'white',
-    fontSize: 30,
-    fontWeight: 'bold',
-  },
+  addButtonText: { color: 'white', fontSize: 30, fontWeight: 'bold' },
 });
 
 export default DashboardScreen;

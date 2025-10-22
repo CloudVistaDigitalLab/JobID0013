@@ -1,7 +1,6 @@
 import React from 'react';
 import { View, Text, StyleSheet, Dimensions, TouchableOpacity } from 'react-native';
 import Swiper from 'react-native-swiper';
-import type { Swiper as SwiperRef } from 'react-native-swiper';
 import { StackNavigationProp } from '@react-navigation/stack';
 import LottieView from 'lottie-react-native';
 // 1. Import AsyncStorage
@@ -44,9 +43,9 @@ const onboardingData = [
     },
 ];
 
-const OnboardingScreen: React.FC<OnboardingScreenProps> = ({ navigation }) => {
-    const swiperRef = React.useRef<SwiperRef>(null);
 
+const OnboardingScreen: React.FC<OnboardingScreenProps> = ({ navigation }) => {
+    const swiperRef = React.useRef<any>(null);
     const isLastSlide = (index: number) => index === onboardingData.length - 1;
 
     // State to track the current slide index

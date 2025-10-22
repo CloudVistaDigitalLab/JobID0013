@@ -1,8 +1,10 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useCallback } from "react";
 import { View, Text, StyleSheet, TouchableOpacity, FlatList, Alert, Modal, TextInput } from "react-native";
 import { createMaterialTopTabNavigator } from "@react-navigation/material-top-tabs";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import Ionicons from "react-native-vector-icons/Ionicons";
+import { SafeAreaView } from "react-native-safe-area-context";
+import { useFocusEffect } from '@react-navigation/native';
 
 const Tab = createMaterialTopTabNavigator();
 
@@ -20,18 +22,25 @@ const TasksTab: React.FC = () => {
   const [editDesc, setEditDesc] = useState("");
   const [editDueDate, setEditDueDate] = useState("");
 
-  useEffect(() => {
-    const fetchTasks = async () => {
-      const id = await AsyncStorage.getItem("userId");
-      if (!id) return;
-      setUserId(id);
+  useFocusEffect(
+    useCallback(() => {
+      const fetchTasks = async () => {
+        const id = await AsyncStorage.getItem("userId");
+        if (!id) return;
+        setUserId(id);
 
-      const res = await fetch(`${API_URL}/${id}/tasks`);
-      const data = await res.json();
-      setTasks(data);
-    };
-    fetchTasks();
-  }, []);
+        try {
+          const res = await fetch(`${API_URL}/${id}/tasks`);
+          const data = await res.json();
+          setTasks(data);
+        } catch (err) {
+          console.error("Failed to fetch tasks:", err);
+        }
+      };
+
+      fetchTasks();
+    }, [])
+  );
 
   const deleteTask = (taskId: string) => {
     Alert.alert("Confirm Delete", "Are you sure you want to delete this task?", [
@@ -73,6 +82,11 @@ const TasksTab: React.FC = () => {
 
   return (
     <View style={styles.container}>
+      {tasks.length === 0 && (
+        <View style={{ flex: 1, justifyContent: "center", alignItems: "center" }}>
+          <Text style={{ color: "#6B7280", fontSize: 16 }}>No tasks available. Add some tasks!</Text>
+        </View>
+      )}
       <FlatList
         data={tasks}
         keyExtractor={(item) => item.task_id}
@@ -128,18 +142,25 @@ const HabitsTab: React.FC = () => {
   const [editDesc, setEditDesc] = useState("");
   const [editFreq, setEditFreq] = useState("");
 
-  useEffect(() => {
-    const fetchHabits = async () => {
-      const id = await AsyncStorage.getItem("userId");
-      if (!id) return;
-      setUserId(id);
+  useFocusEffect(
+    useCallback(() => {
+      const fetchHabits = async () => {
+        const id = await AsyncStorage.getItem("userId");
+        if (!id) return;
+        setUserId(id);
 
-      const res = await fetch(`${API_URL}/${id}/habits`);
-      const data = await res.json();
-      setHabits(data);
-    };
-    fetchHabits();
-  }, []);
+        try {
+          const res = await fetch(`${API_URL}/${id}/habits`);
+          const data = await res.json();
+          setHabits(data);
+        } catch (err) {
+          console.error("Failed to fetch habits:", err);
+        }
+      };
+
+      fetchHabits();
+    }, [])
+  );
 
   const deleteHabit = (habitId: string) => {
     Alert.alert("Confirm Delete", "Are you sure you want to delete this habit?", [
@@ -181,6 +202,11 @@ const HabitsTab: React.FC = () => {
 
   return (
     <View style={styles.container}>
+      {habits.length === 0 && (
+        <View style={{ flex: 1, justifyContent: "center", alignItems: "center" }}>
+          <Text style={{ color: "#6B7280", fontSize: 16 }}>No habits available. Add some habits!</Text>
+        </View>
+      )}
       <FlatList
         data={habits}
         keyExtractor={(item) => item.habit_id}
@@ -227,27 +253,43 @@ const HabitsTab: React.FC = () => {
 // -------------------- MAIN TODO SCREEN --------------------
 const ToDoScreen: React.FC = () => {
   return (
-    <Tab.Navigator>
-      <Tab.Screen name="Tasks" component={TasksTab} />
-      <Tab.Screen name="Habits" component={HabitsTab} />
-    </Tab.Navigator>
+    <SafeAreaView style={styles.safeArea}>
+      <Text style={styles.screenTitle}>Listed ToDos</Text>
+      {/* <Text style={styles.welcomeText}>Welcome, {userName}!</Text>
+      <Text style={styles.subtitle}>Your progress at a glance {test}</Text> */}
+      <Tab.Navigator>
+        <Tab.Screen name="Tasks" component={TasksTab} />
+        <Tab.Screen name="Habits" component={HabitsTab} />
+      </Tab.Navigator>
+    </SafeAreaView>
   );
 };
 
 const styles = StyleSheet.create({
-  container: { flex: 1, padding: 10, backgroundColor: "#F9FAFB" },
+  container: { flex: 1, padding: 10, backgroundColor: "#ffffff" },
   item: {
     flexDirection: "row",
     justifyContent: "space-between",
-    backgroundColor: "#fff",
+    backgroundColor: "#f6d581ff",
     padding: 15,
     borderRadius: 10,
     marginBottom: 10,
     elevation: 2,
   },
   title: { fontSize: 16, fontWeight: "500", color: "#1F2937" },
-  subText: { fontSize: 14, color: "#6B7280" },
+  subText: { fontSize: 14, color: "#6B7280", width: 250 },
   actions: { flexDirection: "row", gap: 15 },
+  screenTitle: {
+    fontSize: 28,
+    fontWeight: 'bold',
+    color: '#3d7bac',
+    marginBottom: 5,
+    padding:20
+  },
+  safeArea: {
+    flex: 1,
+    backgroundColor: '#fff',
+  },
 
   // Modal styles
   modalOverlay: {
